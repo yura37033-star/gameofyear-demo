@@ -229,13 +229,29 @@ export function previewRotation(state, pieceId, direction = 'clockwise') {
       lastValidOffset: { x: 0, y: 0 },
     };
   }
-  const blockedCells = blockedCoordinates(cells, state.cols, state.rows, occupiedByOthers(state.pieces, pieceId));
+  const others = occupiedByOthers(state.pieces, pieceId);
+  let blockedCells = blockedCoordinates(cells, state.cols, state.rows, others);
+  let finalCells = cells;
+  let finalFrame = frame;
+  if (blockedCells.length) {
+    // Variant B: retry with the rotated piece lifted upward by the smallest shift that fits.
+    for (let shift = 1; shift < size; shift += 1) {
+      const lifted = translateCells(cells, 0, -shift);
+      if (lifted.some((cell) => cell.y < 0)) break;
+      if (blockedCoordinates(lifted, state.cols, state.rows, others).length === 0) {
+        finalCells = lifted;
+        finalFrame = { ...frame, y: frame.y - shift };
+        blockedCells = [];
+        break;
+      }
+    }
+  }
   return {
     valid: blockedCells.length === 0,
-    cells,
+    cells: finalCells,
     blockedCells,
     reason: blockedCells.length ? 'rotation-overlap' : null,
-    frame,
+    frame: finalFrame,
     acceptedPath: [{ x: 0, y: 0 }],
     lastValidOffset: { x: 0, y: 0 },
   };
@@ -363,7 +379,7 @@ function fallbackStart(cols, rows, palette) {
   return pieces;
 }
 
-export function createGame({ cols = 10, rows = 16, seed = 1, palette = DEFAULT_PALETTE } = {}) {
+export function createGame({ cols = 10, rows = 20, seed = 1, palette = DEFAULT_PALETTE } = {}) {
   if (!Number.isInteger(cols) || cols < 4 || !Number.isInteger(rows) || rows < 4) {
     throw new RangeError('cols and rows must be integers of at least 4');
   }

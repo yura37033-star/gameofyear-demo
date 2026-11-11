@@ -67,14 +67,20 @@ export function simplifyPath(path) {
   return result;
 }
 
+// Floating positions that are mathematically integers can be off by a few ulps;
+// treat contact within this tolerance as touching, not overlapping.
+const EPSILON = 1e-9;
+
 function crossingTimes(start, velocity, obstacle) {
-  if (velocity === 0) return start + 1 <= obstacle || start >= obstacle + 1 ? null : [-Infinity, Infinity];
+  if (Math.abs(velocity) <= EPSILON) {
+    return start + 1 <= obstacle + EPSILON || start >= obstacle + 1 - EPSILON ? null : [-Infinity, Infinity];
+  }
   const a = (obstacle - start - 1) / velocity, b = (obstacle + 1 - start) / velocity;
   return [Math.min(a, b), Math.max(a, b)];
 }
 
 function earliestContact(piece, pieces, from, delta, cols, rows) {
-  const epsilon = 1e-9;
+  const epsilon = EPSILON;
   let earliest = null;
   const blockers = pieces.filter((other) => other.id !== piece.id).flatMap((other) => other.cells);
   const consider = (time, normals, corner = false) => {

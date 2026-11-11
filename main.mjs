@@ -47,6 +47,16 @@ function brighten(hex, amount = 25) {
   if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
   return '#' + hex.slice(1).match(/../g).map((part) => Math.min(255, parseInt(part, 16) + amount).toString(16).padStart(2, '0')).join('');
 }
+function roundRectPath(context, x, y, w, h, r) {
+  if (typeof context.roundRect === 'function') { context.roundRect(x, y, w, h, r); return; }
+  const radius = Math.max(0, Math.min(r, w / 2, h / 2));
+  context.moveTo(x + radius, y);
+  context.arcTo(x + w, y, x + w, y + h, radius);
+  context.arcTo(x + w, y + h, x, y + h, radius);
+  context.arcTo(x, y + h, x, y, radius);
+  context.arcTo(x, y, x + w, y, radius);
+  context.closePath();
+}
 function drawBar(context, x, y, width, height, color, alpha = 1, scale = 1, selected = false) {
   const gap = Math.max(1, cell * .065), radius = Math.max(2, cell * .15);
   const left = x * cell + gap, top = y * cell + gap;
@@ -60,7 +70,7 @@ function drawBar(context, x, y, width, height, color, alpha = 1, scale = 1, sele
   gradient.addColorStop(0, brighten(color, 28)); gradient.addColorStop(.55, color);
   gradient.addColorStop(1, color);
   context.fillStyle = gradient;
-  context.beginPath(); context.roundRect(left, top, barWidth, barHeight, radius); context.fill();
+  context.beginPath(); roundRectPath(context, left, top, barWidth, barHeight, radius); context.fill();
   context.strokeStyle = selected ? '#fff5da' : '#ffffff54';
   context.lineWidth = selected ? 2 : 1;
   context.stroke();
@@ -88,7 +98,7 @@ function drawHint(cells, blocked = false) {
   const width = Math.max(...xs) - left + 1, height = Math.max(...ys) - top + 1;
   ctx.save(); ctx.fillStyle = blocked ? '#ff657420' : '#9dfbe51c';
   ctx.strokeStyle = blocked ? '#ff8292d9' : '#a3ffe0ce'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
-  ctx.beginPath(); ctx.roundRect(left * cell + 3, top * cell + 3, width * cell - 6, height * cell - 6, Math.max(1, cell * .12));
+  ctx.beginPath(); roundRectPath(ctx, left * cell + 3, top * cell + 3, width * cell - 6, height * cell - 6, Math.max(1, cell * .12));
   ctx.fill(); ctx.stroke();
   ctx.restore();
 }
@@ -108,7 +118,7 @@ function render() {
   ctx.fillStyle = '#0c182a'; ctx.fillRect(0, 0, state.cols * cell, state.rows * cell);
   for (let y = 0; y < state.rows; y++) for (let x = 0; x < state.cols; x++) {
     ctx.fillStyle = (x + y) % 2 ? '#14233a61' : '#17283e61';
-    ctx.beginPath(); ctx.roundRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2, 3); ctx.fill();
+    ctx.beginPath(); roundRectPath(ctx, x * cell + 1, y * cell + 1, cell - 2, cell - 2, 3); ctx.fill();
   }
   const danger = scene.some((p) => p.cells.some((c) => c.y <= 2));
   frame.classList.toggle('danger', danger);
@@ -135,7 +145,7 @@ function render() {
     if (hint) drawHint(hint);
   }
   nextCtx.clearRect(0, 0, state.cols * cell, cell);
-  for (let x = 0; x < state.cols; x++) { nextCtx.fillStyle = '#192b4380'; nextCtx.beginPath(); nextCtx.roundRect(x * cell + 1, 1, cell - 2, cell - 2, 3); nextCtx.fill(); }
+  for (let x = 0; x < state.cols; x++) { nextCtx.fillStyle = '#192b4380'; nextCtx.beginPath(); roundRectPath(nextCtx, x * cell + 1, 1, cell - 2, cell - 2, 3); nextCtx.fill(); }
   for (const p of displayedRow) drawBar(nextCtx, p.x, 0, p.length, 1, p.color, .92);
   $('score').textContent = displayedScore.toLocaleString('uk-UA'); $('turn').textContent = state.turn;
   $('gameOver').hidden = state.status !== 'gameover' || busy;
@@ -176,7 +186,7 @@ function finishPlayback() {
 function startGame() {
   actionEpoch++; cancelTween(); cancelDrag(); busy = false; selectedId = null; activePhase = null; rotationTween = null;
   hintDirection = 'clockwise';
-  state = createGame({ cols: 10, rows: 16, seed: seed() });
+  state = createGame({ cols: 10, rows: 20, seed: seed() });
   scene = state.pieces; displayedRow = state.nextRow; displayedScore = state.score;
   board.classList.remove('dragging'); frame.classList.remove('resolve', 'invalid'); $('gain').classList.remove('show');
   message('Торкнись фігури, щоб обрати.'); resize();
