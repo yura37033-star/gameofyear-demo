@@ -1,4 +1,4 @@
-import { createRandom, generateRow, generateStartPieces } from './generator.mjs';
+import { createRandom, generateRow, generateStartPieces } from './generator.mjs?v=trial-f0203c018d';
 
 const DEFAULT_PALETTE = ['#5D8FE8', '#F3C969'];
 export const COLOR_DEBUT_SCORE = 3000;
@@ -407,7 +407,63 @@ function generateTrialRow(cols, palette, random, incomingTurn, score, baseColor,
       if (alternatives.length) segment.color = alternatives[Math.floor(random() * alternatives.length)];
     }
   }
+  if (score >= COLOR_DEBUT_SCORE && row.length) {
+    const rowColor = row[0].color;
+    return row.map((segment) => ({ ...segment, color: rowColor }));
+  }
   return row;
+}
+
+function chooseCompatibleGaps(state, row, seed) {
+  const rowColor = row[0]?.color;
+  if (!row.length || row.some((segment) => segment.color !== rowColor)) return row;
+  const gapCount = state.cols - row.reduce((total, segment) => total + segment.length, 0);
+  const shifted = state.pieces.map((item) => ({
+    ...item,
+    cells: translateCells(item.cells, 0, -1),
+    frame: { ...item.frame, y: item.frame.y - 1 },
+  }));
+  const foreignBottomCount = (segments) => {
+    const inserted = segments.map((segment, index) => {
+      const cells = Array.from({ length: segment.length }, (_, x) => ({ x: segment.x + x, y: state.rows - 1 }));
+      return { id: `compat-${index}`, color: rowColor, cells, frame: makeFrame(cells) };
+    });
+    let count = 0;
+    for (const item of settle([...shifted, ...inserted], state.rows, null)) {
+      if (item.color !== rowColor) count += item.cells.filter((cell) => cell.y === state.rows - 1).length;
+    }
+    return count;
+  };
+
+  let best = row;
+  let lowestForeign = foreignBottomCount(row);
+  if (!lowestForeign) return row;
+  const mirrored = row.map((segment) => ({
+    ...segment,
+    x: state.cols - segment.x - segment.length,
+  })).reverse();
+  const alternatives = [mirrored];
+  const layoutRandom = createRandom((seed ^ 0x9e3779b1) >>> 0);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const gaps = Array(row.length + 1).fill(0);
+    for (let gap = 0; gap < gapCount; gap += 1) gaps[Math.floor(layoutRandom() * gaps.length)] += 1;
+    let position = 0;
+    alternatives.push(row.map((segment, index) => {
+      position += gaps[index];
+      const x = position;
+      position += segment.length;
+      return { ...segment, x };
+    }));
+  }
+  for (const candidate of alternatives) {
+    const foreignCount = foreignBottomCount(candidate);
+    if (foreignCount < lowestForeign) {
+      best = candidate;
+      lowestForeign = foreignCount;
+    }
+    if (!lowestForeign) break;
+  }
+  return best;
 }
 
 function trialRowColorMode(state, debutCount = state._debutRowsReserved ?? 0) {
@@ -702,6 +758,9 @@ function findTrialWitness(state, budget, firstActions, { deduplicateFirstStates 
       const debutCount = continuationState._debutRowsReserved ?? 0;
       const { baseColor, forcedSecondColor, forcedRowColor } = trialRowColorMode(continuationState, debutCount);
       continuationRow = generateTrialRow(continuationState.cols, continuationState.palette, random, continuationState.turn + 1, continuationState.score, baseColor, forcedRowColor);
+      if (continuationState.score >= COLOR_DEBUT_SCORE) {
+        continuationRow = chooseCompatibleGaps(continuationState, continuationRow, random.state);
+      }
       continuationRng = random.state;
       if (forcedSecondColor) continuationState._debutRowsReserved = debutCount + 1;
       continuationState.nextRow = continuationRow;
@@ -734,7 +793,7 @@ function findTrialWitness(state, budget, firstActions, { deduplicateFirstStates 
 }
 
 function findHeldWitness(state) {
-  if (!state.trial || state.status !== 'playing' || state.score >= HINT_SCORE_LIMIT) return null;
+  if (!state.trial || state.status !== 'playing' || state.score >= HELD_WITNESS_SCORE_LIMIT) return null;
   const poolBudget = makeTrialSearchBudget(0, 900, 1800);
   const firstActions = legalTrialActions(state, poolBudget, 48);
   if (!firstActions.length) return null;
@@ -755,7 +814,8 @@ function selectTrialPreview(state, random) {
   const rootSeed = random.state;
   const debutCount = state._debutRowsReserved ?? 0;
   const { baseColor, forcedSecondColor, forcedRowColor } = trialRowColorMode(state, debutCount);
-  const fallbackRow = generateTrialRow(state.cols, state.palette, random, incomingTurn, state.score, baseColor, forcedRowColor);
+  let fallbackRow = generateTrialRow(state.cols, state.palette, random, incomingTurn, state.score, baseColor, forcedRowColor);
+  if (state.score >= COLOR_DEBUT_SCORE) fallbackRow = chooseCompatibleGaps(state, fallbackRow, rootSeed);
   const attemptEasy = random() < easySelectionChance(state.score);
   const fallbackRng = random.state;
   const nearCeiling = state.rows - stackHeight(state.pieces, state.rows) <= 2;
@@ -779,6 +839,7 @@ function selectTrialPreview(state, random) {
     if (attempt > 0) {
       const candidateRandom = createRandom((rootSeed ^ Math.imul(attempt + 3, 0x9e3779b1)) >>> 0);
       row = generateTrialRow(state.cols, state.palette, candidateRandom, incomingTurn, state.score, baseColor, forcedRowColor);
+      if (state.score >= COLOR_DEBUT_SCORE) row = chooseCompatibleGaps(state, row, candidateRandom.state);
       candidateRng = candidateRandom.state;
     }
     const candidate = { ...state, nextRow: copyRow(row), nextRowKind: 'regular', skipNextRise: false, _witness: null, _rng: candidateRng, _debutRowsReserved: debutCount + (forcedSecondColor ? 1 : 0) };
@@ -1068,7 +1129,7 @@ export function rotatePiece(state, pieceId, direction = 'clockwise') {
 // preparation when needed. The live board and its generator remain untouched.
 // The action pool and the replay budgets bound the work deterministically.
 // ---------------------------------------------------------------------------
-export const HINT_SCORE_LIMIT = 1000;
+const HELD_WITNESS_SCORE_LIMIT = 1000;
 const HINT_POOL_SIZE = 96;
 const HINT_SIMULATION_LIMIT = 160;
 const HINT_REPLAY_LIMIT = 4;
@@ -1128,7 +1189,7 @@ function actionFromSignature(state, signature) {
 }
 
 export function suggestAction(state) {
-  if (!state || state.trial !== true || state.status !== 'playing' || !(state.score < HINT_SCORE_LIMIT)) return null;
+  if (!state || state.trial !== true || state.status !== 'playing') return null;
 
   const pool = legalTrialActions(state, makeTrialSearchBudget(0, 3200, 7000), HINT_POOL_SIZE);
 

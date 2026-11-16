@@ -1,6 +1,6 @@
-import { COLOR_DEBUT_SCORE, HINT_SCORE_LIMIT, createGame, movePieceAlongPath, previewRotation, rotatePiece, suggestAction } from './core/game.mjs';
-import { buildPlayback, samplePieces, advanceDrag } from './motion.mjs';
-import { BUILD_ID, createJournal, finishGameLog, formatAll, formatReport, latestGame, parseDevice, recordTurn, startGameLog } from './journal.mjs';
+import { COLOR_DEBUT_SCORE, createGame, movePieceAlongPath, previewRotation, rotatePiece, suggestAction } from './core/game.mjs?v=trial-f0203c018d';
+import { buildPlayback, samplePieces, advanceDrag } from './motion.mjs?v=trial-f0203c018d';
+import { BUILD_ID, createJournal, finishGameLog, formatAll, formatReport, latestGame, parseDevice, recordTurn, startGameLog } from './journal.mjs?v=trial-f0203c018d';
 
 const $ = (id) => document.getElementById(id);
 const board = $('board'), nextCanvas = $('nextRow'), playArea = $('playArea'), frame = $('boardFrame');
@@ -240,7 +240,7 @@ function render() {
   for (const [direction, button] of Object.entries(rotationButtons)) {
     button.disabled = !rotationHints?.[direction];
   }
-  if (!busy) hintVisible = state.trial === true && state.status === 'playing' && state.score < HINT_SCORE_LIMIT;
+  if (!busy) hintVisible = state.trial === true && state.status === 'playing';
   hintButton.classList.toggle('is-off', !hintVisible);
   hintButton.disabled = busy || Boolean(drag) || !hintVisible;
   for (const [direction, button] of Object.entries(rotationButtons)) {

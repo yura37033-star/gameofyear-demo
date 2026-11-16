@@ -3,7 +3,7 @@
 // The journal lives outside the core. It never mutates its inputs and keeps only
 // primitive values derived from them, so it cannot perturb the game.
 
-export const BUILD_ID = 'trial-9bd9578ba9';
+export const BUILD_ID = 'trial-f0203c018d';
 export const JOURNAL_CAPACITY = 5; // the game in progress plus up to four finished ones
 
 export function createJournal() {
